@@ -2,13 +2,15 @@ package com.example.sandeep.tessartlib;
 
 import static android.content.ContentValues.TAG;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
-import android.content.Context;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -52,15 +54,37 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            // Should we show an explanation?
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                        1);
+            }
+        }
+
         imageView = findViewById(R.id.img);
         textView = this.findViewById(R.id.textView);
         Button button = this.findViewById(R.id.button);
+        getStorageAccessPermissions();
         checkPermission();
         button.setOnClickListener(v -> {
             checkPermission();
             TakePictureIntent();
             textView.setText("Please wait....");
         });
+    }
+
+    private void getStorageAccessPermissions() {
+        int hasWriteStoragePermission = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+        if (hasWriteStoragePermission != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE}, 121);
+        }
     }
 
     private void checkPermission() {
@@ -117,21 +141,14 @@ public class MainActivity extends AppCompatActivity {
                 prepareTessData();
                 startOCR(photoURI);
                 imageView.setImageURI(resultUri);
-
                 Log.e("uploadImage", "=" + mCurrentPhotoPath);
-
             }
             if(resultCode==-1 && data==null)
             {
-
-                CropImage.activity(photoURI)
-                        .setGuidelines(CropImageView.Guidelines.ON)
-                        .setCropShape(CropImageView.CropShape.RECTANGLE) //You can skip this for free form aspect ratio)
-                        .start(this);
-
+                cropImage(photoURI);
             }
         }
-        }
+    }
 
     private void cropImage(Uri img_uri) {
         CropImage.activity(img_uri).setGuidelines(CropImageView.Guidelines.ON).setMultiTouchEnabled(true).start(this);
@@ -147,7 +164,7 @@ public class MainActivity extends AppCompatActivity {
             }
             String fileList[] = getAssets().list("");
             for(String fileName : fileList){
-               // String pathToDataFile = dir + "/" + fileName;
+                // String pathToDataFile = dir + "/" + fileName;
                 if(!(new File(mCurrentPhotoPath)).exists()){
                     InputStream in = getAssets().open(fileName);
                     OutputStream out = new FileOutputStream(mCurrentPhotoPath);
@@ -163,6 +180,36 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, e.getMessage());
         }
+
+
+        String DATA_PATH = getExternalFilesDir("/").getPath();
+        String TESS_DATA = "/tessdata";
+        try {
+            File dir = new File(DATA_PATH,TESS_DATA);
+            if (!dir.exists()) {
+                if (dir.mkdir()){
+                    Log.e("made","Made");
+                }
+            }
+            String fileList[] = getAssets().list("");
+            for (String fileName : fileList) {
+                String pathToDataFile = DATA_PATH + TESS_DATA + "/" + fileName;
+                if (!(new File(pathToDataFile)).exists()) {
+                    InputStream in = getAssets().open(fileName);
+                    OutputStream out = new FileOutputStream(pathToDataFile);
+                    byte[] buff = new byte[1024];
+                    int len;
+                    while ((len = in.read(buff)) > 0) {
+                        out.write(buff, 0, len);
+                    }
+                    in.close();
+                    out.close();
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, e.getMessage());
+        }
+
     }
 
     private void startOCR(Uri photoURI){
@@ -172,8 +219,8 @@ public class MainActivity extends AppCompatActivity {
             options.inSampleSize = 6;
             Bitmap bitmap = BitmapFactory.decodeFile(photoURI.getPath(), options);
 
-                    String result = this.getText(bitmap);
-                    textView.setText(result);
+            String result = this.getText(bitmap);
+            textView.setText(result);
 
 
         }catch (Exception e){
@@ -188,10 +235,12 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, e.getMessage());
             Toast.makeText(this, "error", Toast.LENGTH_SHORT).show();
         }
+       // String dataPath = Environment.getExternalStorageDirectory().getAbsolutePath() + '/';
+        String dataPath = getExternalFilesDir("/").getPath();
+        Log.e("", dataPath );
+        tessBaseAPI.init(dataPath,"eng");
 
-        String dataPath =  "/";
-        textView.setText(dataPath);
-        tessBaseAPI.init(dataPath, "eng");
+
         tessBaseAPI.setImage(bitmap);
         String retStr = "No result";
         try{
@@ -204,5 +253,22 @@ public class MainActivity extends AppCompatActivity {
         return retStr;
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        switch (requestCode) {
+            case 120: {
+                if (grantResults.length > 0 && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Read permission denied", Toast.LENGTH_SHORT).show();
+                }
+            }
+            case 121: {
+                if (grantResults.length > 0 && grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "Write permission denied", Toast.LENGTH_SHORT).show();
+                }
+            }
+            return;
+        }
+    }
 
 }
